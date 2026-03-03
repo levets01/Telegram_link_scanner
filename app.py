@@ -2,6 +2,7 @@ import os
 import requests
 import validators
 import base64
+import asyncio
 from urllib.parse import urlparse
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -38,7 +39,7 @@ async def analizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     try:
-        # Codificar URL en base64 (requerido por VT)
+        # Codificar URL en base64 (requerido por VirusTotal)
         url_bytes = url.encode()
         url_id = base64.urlsafe_b64encode(url_bytes).decode().strip("=")
 
@@ -47,13 +48,24 @@ async def analizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             headers=headers
         )
 
+        # =========================
+        # BANNER BASE
+        # =========================
+        banner = (
+            "========================\n"
+            "⚠ ERROR 404 - SCAN REPORT\n"
+            "========================\n\n"
+        )
+
         if response.status_code == 404:
-            await update.message.reply_text("⚠️ URL no encontrada en base de datos.")
+            await update.message.reply_text(
+                banner + "❌ La URL no existe en la base de datos de VirusTotal."
+            )
             return
 
         if response.status_code != 200:
             await update.message.reply_text(
-                f"❌ Error API: {response.status_code}\n{response.text}"
+                banner + f"❌ Error API: {response.status_code}"
             )
             return
 
@@ -77,6 +89,7 @@ async def analizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             riesgo = "✅ Sin detecciones conocidas"
 
         mensaje = (
+            banner +
             f"{riesgo}\n\n"
             f"🌐 Dominio: {dominio}\n\n"
             f"Malicious: {malicious}\n"
@@ -88,15 +101,23 @@ async def analizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(mensaje)
 
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Error interno:\n{str(e)}")
-
+        await update.message.reply_text(
+            "========================\n"
+            "⚠ ERROR 500 - INTERNAL\n"
+            "========================\n\n"
+            f"{str(e)}"
+        )
 
 # =========================
-# INICIAR BOT
+# INICIAR BOT (FIX PYTHON 3.14)
 # =========================
 
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analizar))
 
-print("🤖 Bot activo en Render...")
-app.run_polling()
+async def main():
+    print("🤖 Bot activo en Render...")
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
